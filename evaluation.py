@@ -10,7 +10,8 @@ from utils.general_utils import DATASET_CLASSES, GPU_KEYS
 from evaluate import load
 from rouge_score import rouge_scorer
 
-from torchmetrics import Accuracy
+#from torchmetrics import Accuracy
+from torchmetrics.classification import Accuracy
 
 logger = logging.getLogger(__name__)
 from transformers import (
@@ -88,13 +89,13 @@ class Evaluation(object):
         )
         
         self.p_accuracy = Accuracy(num_classes=2, task="multiclass").to(self.device)
-        self.k_accuracy = Accuracy(num_classes=10,task="multicllass").to(self.device)
-        self.chrf_metric = load_metric("chrf")
-        self.rouge = load_metric('rouge')
+        self.k_accuracy = Accuracy(num_classes=10,task="multiclass").to(self.device)
+        self.chrf_metric = load("chrf")
+        self.rouge = load('rouge')
         # self.rouge = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
-        self.bleu_metric = load_metric("sacrebleu")
-        self.f1_p = load_metric("f1")
-        self.f1_uni = load_metric("chrf")
+        self.bleu_metric = load("sacrebleu")
+        self.f1_p = load("f1")
+        self.f1_uni = load("chrf")
 
     def evaluate(self, model, epoch, typ):
         metrics = self.evaluate_rag(model, epoch, typ)
@@ -262,15 +263,15 @@ def eval_file(path, gpu_ids):
     device = "cuda:"+str(gpu_ids)
     p_accuracy = Accuracy(num_classes=2,task="multiclass").to(device)
     k_accuracy = Accuracy(num_classes=10,task="multiclass").to(device)
-    bleu_metric = load_metric("sacrebleu")
-    bleu1_metric = load_metric("bleu")
+    bleu_metric = load("sacrebleu")
+    bleu1_metric = load("bleu")
     
-    chrf = load_metric("chrf")
+    chrf = load("chrf")
     # rouge = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
-    rouge = load_metric('rouge')
-    berts = load_metric('bertscore')
-    f1_p = load_metric("f1")
-    f1_uni = load_metric("chrf")
+    rouge = load('rouge')
+    berts = load('bertscore')
+    f1_p = load("f1")
+    f1_uni = load("chrf")
 
     rouge1 = 0
     rouge2 = 0
