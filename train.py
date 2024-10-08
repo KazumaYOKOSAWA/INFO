@@ -15,7 +15,7 @@ from transformers import AdamW, get_linear_schedule_with_warmup
 from torch.optim.lr_scheduler import LambdaLR, ExponentialLR
 
 from torch.utils.data import DataLoader
-from evaluate import Evaluation
+from evaluation import Evaluation
 from utils.eval_utils import CheckpointManager, load_checkpoint
 
 from utils.general_utils import (

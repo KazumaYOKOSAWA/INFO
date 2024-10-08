@@ -6,7 +6,8 @@ from tqdm import tqdm
 import torch
 from torch.utils.data import DataLoader
 from utils.general_utils import DATASET_CLASSES, GPU_KEYS
-from datasets import load_metric
+#from datasets import load_metric
+from evaluate import load
 from rouge_score import rouge_scorer
 
 from torchmetrics import Accuracy
@@ -86,8 +87,8 @@ class Evaluation(object):
             self.args.backbone,
         )
         
-        self.p_accuracy = Accuracy(num_classes=2, multiclass=True).to(self.device)
-        self.k_accuracy = Accuracy(num_classes=10).to(self.device)
+        self.p_accuracy = Accuracy(num_classes=2, task="multiclass").to(self.device)
+        self.k_accuracy = Accuracy(num_classes=10,task="multicllass").to(self.device)
         self.chrf_metric = load_metric("chrf")
         self.rouge = load_metric('rouge')
         # self.rouge = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
@@ -259,8 +260,8 @@ def eval_file(path, gpu_ids):
         data = json.load(f)["qualitative_results"]
     # move the metric to device you want computations to take place
     device = "cuda:"+str(gpu_ids)
-    p_accuracy = Accuracy(num_classes=2, multiclass=True).to(device)
-    k_accuracy = Accuracy(num_classes=10).to(device)
+    p_accuracy = Accuracy(num_classes=2,task="multiclass").to(device)
+    k_accuracy = Accuracy(num_classes=10,task="multiclass").to(device)
     bleu_metric = load_metric("sacrebleu")
     bleu1_metric = load_metric("bleu")
     
