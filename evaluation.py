@@ -10,6 +10,8 @@ from utils.general_utils import DATASET_CLASSES, GPU_KEYS
 from evaluate import load
 from rouge_score import rouge_scorer
 
+blue += 
+
 #from torchmetrics import Accuracy
 from torchmetrics.classification import Accuracy
 
@@ -149,8 +151,8 @@ class Evaluation(object):
                         if k_label.item() in r5_indices[0].detach().tolist():
                             h5 += 1
                         
-                        bleu += self.bleu_metric.compute(predictions=[text_pred], references=[[text_target]])['score']
-                        charf += self.chrf_metric.compute(predictions=[text_pred], references=[[text_target]])['score']
+                        bleu += self.bleu_metric.compute(predictions=[text_pred.split()], references=[[text_target.split()]])['score']
+                        charf += self.chrf_metric.compute(predictions=[text_pred.split()], references=[[text_target.split()]])['score']
                         # r = self.rouge.score(text_pred, text_target)
                         r = self.rouge.compute(predictions=[text_pred], references=[text_target])
                         # rouge1 += r['rouge1'].fmeasure
@@ -159,7 +161,7 @@ class Evaluation(object):
                         rouge1 += r['rouge1'].mid.fmeasure
                         rouge2 += r['rouge2'].mid.fmeasure
                         rougel += r['rougeL'].mid.fmeasure
-                        unif1 += self.f1_uni.compute(predictions=[text_pred], references=[[text_target]], word_order=1, char_order=0)['score']
+                        unif1 += self.f1_uni.compute(predictions=[text_pred.split()], references=[[text_target.split]], word_order=1, char_order=0)['score']
                         qual_output = {
                             "dialogID": batch["dialogID"][0],
                             "landmark_link": batch["landmark_link"][0],
@@ -298,12 +300,12 @@ def eval_file(path, gpu_ids):
     
             k_index = torch.tensor([0]).to(device)
             k_label = torch.tensor([0]).to(device)
-        bleu += bleu_metric.compute(predictions=[text_pred], references=[[text_target]])['score']
-        charf1 += chrf.compute(predictions=[text_pred], references = [[text_target]], word_order=2)['score']
+        bleu += bleu_metric.compute(predictions=[text_pred.split()], references=[[text_target.split()]])['score']
+        charf1 += chrf.compute(predictions=[text_pred.split()], references = [[text_target.split()]], word_order=2)['score']
         r = rouge.compute(predictions=[text_pred], references=[text_target])
         # r = rouge.score(text_pred, text_target)
         f1_persona += f1_p.compute(predictions=p_index, references=p_label)["f1"]
-        unif1 += f1_uni.compute(predictions=[text_pred], references=[[text_target]], word_order=1, char_order=0)[
+        unif1 += f1_uni.compute(predictions=[text_pred.split()], references=[[text_target.split()]], word_order=1, char_order=0)[
             'score']
         bleu1 += bleu1_metric.compute(predictions=[text_pred.split(" ")], references=[[text_target.split(" ")]], max_order=1)["bleu"]
         
