@@ -10,7 +10,6 @@ from utils.general_utils import DATASET_CLASSES, GPU_KEYS
 from evaluate import load
 from rouge_score import rouge_scorer
 
-blue += 
 
 #from torchmetrics import Accuracy
 from torchmetrics.classification import Accuracy
@@ -141,6 +140,13 @@ class Evaluation(object):
                     
                     text_pred = pred
                     text_target = self.tokenizer.decode(gold[0], skip_special_tokens=True)
+                    
+                    #入力のtypeの確認
+                    print(f"text_pred type: {type(text_pred)}")
+                    print(f"text_target type: {type(text_target)}")
+                    print(f"text_pred: {text_pred}")
+                    print(f"text_target: {text_target}")
+                    # 
                     
                     if text_target != "":
                         self.k_accuracy.update(k_index[0], k_label)
