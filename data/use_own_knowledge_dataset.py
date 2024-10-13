@@ -74,6 +74,8 @@ def main(
     dataset = load_dataset(
         "csv", data_files=[rag_example_args.csv_path], split="train", delimiter="\t", column_names=["title", "text"]
     )
+    #デバッグ用
+    dataset = dataset.select([0])
 
     # More info about loading csv files in the documentation: https://huggingface.co/docs/datasets/loading_datasets.html?highlight=csv#csv-files
 

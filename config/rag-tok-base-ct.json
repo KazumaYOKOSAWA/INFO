@@ -6,7 +6,7 @@
   "prefix": "pkchat",
   "tb_prefix": "pkchat",
   "debug": false,
-  "data_dir": "/content/INFO//data/FoCus",
+  "data_dir": "/content/INFO/data/FoCus",
   "out_dir": "results/",
   "save_dirpath": "/content/INFO/data/checkpoints/",
   "root_dirpath": "",
