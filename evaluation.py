@@ -135,7 +135,7 @@ class Evaluation(object):
             os.makedirs(os.path.join(os.path.dirname(self.args.save_dirpath), self.args.tb_prefix),
                         exist_ok=True)
             with open(os.path.join(os.path.dirname(self.args.save_dirpath), self.args.tb_prefix,
-                                   typ + f'_qualitative_results_{epoch}.json'), 'w',
+                                   typ + f'_qualitative_test_results_{epoch}.json'), 'w',
                       newline='') as fw:
                 tqdm_batch_iterator = tqdm(self.data_map[typ])
                 qual_outputs = []
@@ -160,7 +160,7 @@ class Evaluation(object):
                     
                     if text_target != "":
                         #when persona is incorrect
-                        if not torch.equal(persona_pred, p_label):
+                        """if not torch.equal(persona_pred, p_label):
                           # p_label内で "1" になっている要素のインデックスを取得
                           incorrect_indices = [i for i, label in enumerate(p_label[0]) if label == 1 and persona_pred[0][i] != 1]
 
@@ -193,8 +193,10 @@ class Evaluation(object):
                             "knowledge_grounding": batch["raw_knowledge_cand"][0][k_label[0]],
                             "predicted_utterance": text_pred,
                             "ground_truth_utterance": text_target
-                        })
-
+                        })"""
+                        #debug
+                        #print(persona_pred,p_label)
+                        #persona_pred = 1 - p_label
                         self.k_accuracy.update(k_index[0], k_label)
                         self.p_accuracy.update(persona_pred, p_label)
                         f1_persona += self.f1_p.compute(predictions=persona_pred[0], references=p_label[0])["f1"]
@@ -278,12 +280,12 @@ class Evaluation(object):
                        rouge1_f, rouge2_f, rougel_f, charf_f, unif1_f))
         
                 # 誤分類されたデータをJSONとして保存
-                with open("incorrect_persona_predictions.json", 'w') as fp:
+                """with open("incorrect_persona_predictions.json", 'w') as fp:
                   json.dump(incorrect_persona, fp, indent=2)
                 with open("incorrect_em_persona_predictions.json", 'w') as fp:
                   json.dump(incorrect_em_persona, fp, indent=2)
                 with open("incorrect_knowledge_predictions.json", 'w') as fk:
-                  json.dump(incorrect_knowledge, fk, indent=2)
+                  json.dump(incorrect_knowledge, fk, indent=2)"""
             return metrics
 
     
@@ -408,5 +410,5 @@ if __name__ == '__main__':
     evaluation = Evaluation(args, tokenizer, data_processor, model_processor)
 
     # モデルを指定して評価を実行
-    metrics = evaluation.evaluate(model, epoch=3, typ="valid")  # validまたはtestを選択
+    metrics = evaluation.evaluate(model, epoch=1, typ="valid")  # validまたはtestを選択
     print(metrics)  # 結果を表示

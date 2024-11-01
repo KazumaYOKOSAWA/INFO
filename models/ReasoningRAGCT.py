@@ -301,7 +301,7 @@ class ReasoningRAGCT(nn.Module):
         persona_num_pred = self.softmax(persona_num_pred_logit)
         
         persona_num = torch.argmax(persona_num_pred, 1).detach().tolist()
-        bsz = persona_input_ids.size()[0]
+        """bsz = persona_input_ids.size()[0]
         pe_sel_input_ids_b = []
         pe_sel_index = []
         for bs in range(bsz):
@@ -326,12 +326,146 @@ class ReasoningRAGCT(nn.Module):
             
             assert len(pe_sel_input_ids_b_f) == self.args.max_paragraph_len
             pe_sel_input_ids_b.append(torch.tensor(pe_sel_input_ids_b_f).long())
-        
+        # pe_sel_input_idsを生成
         pe_sel_input_ids = torch.stack(pe_sel_input_ids_b).to(self.device)
         pe_sel_indices = torch.stack(pe_sel_index).to(self.device)
-        persona_pred = pe_sel_indices
+        persona_pred = pe_sel_indices  # persona_predも更新
 
+        # 設定が正しいか確認するコード
+        print("pe_sel_input_ids.shape:", pe_sel_input_ids.shape)
+        print("pe_sel_indices.shape:", pe_sel_indices.shape)
+        print("persona_pred.shape:", persona_pred.shape)
+
+        # 値の確認
+        print("pe_sel_input_ids[0]:", pe_sel_input_ids[0])  # バッチ0のpersona input_idsの確認
+        print("pe_sel_indices[0]:", pe_sel_indices[0])  # バッチ0のpersona選択インデックスの確認
+        print("persona_pred[0]:", persona_pred[0])  # persona_predのバッチ0の内容確認
+
+        print("persona_grounding:", persona_grounding)
+        print("persona_pred:", persona_pred)"""
+
+        #True
+        bsz = persona_input_ids.size()[0]
+        pe_sel_input_ids_b = []
+        pe_sel_index = []
+        for bs in range(bsz):
+            pe_empty_index = torch.zeros([self.args.persona_num], device=self.device)  # デバイス上でゼロのテンソルを作成
+            grounding_value = persona_grounding[bs]  # 各バッチのpersona_groundingを取得
+            print("Grounding value for batch", bs, ":", grounding_value)
+            print("pe_empty_index before assignment:", pe_empty_index)
+            # persona_groundingに基づいて選択
+            if grounding_value.sum().item() != 0:  # persona_groundingが全て0でない場合
+                pe_empty_index[grounding_value.bool()] = 1  # grounding_valueが1のインデックスを1に設定
+                #pe_sel_input_ids_b_f = persona_input_ids[bs, :, :][0]  # persona_groundingに基づいて選択
+                pe_sel_input_ids_b_f = persona_input_ids[bs, grounding_value.bool(), :]
+                pe_sel_input_ids_b_f = pe_sel_input_ids_b_f[pe_sel_input_ids_b_f != self.tokenizer.question_encoder.pad_token_id].detach().tolist()
+                
+                # persona_predとして選択されたインデックスを追加
+                pe_sel_index.append(pe_empty_index)
+            else:
+                pe_sel_input_ids_b_f = []
+                pe_sel_index.append(pe_empty_index)  # 0のインデックスを追加
+            #
+            print("pe_empty_index after assignment:", pe_empty_index)
+            candidate_padding_length = self.args.max_paragraph_len - len(pe_sel_input_ids_b_f)
+            
+            if candidate_padding_length > 0:
+                pe_sel_input_ids_b_f += [self.tokenizer.question_encoder.pad_token_id] * candidate_padding_length
+            else:
+                pe_sel_input_ids_b_f = pe_sel_input_ids_b_f[:self.args.max_paragraph_len]
+            
+            assert len(pe_sel_input_ids_b_f) == self.args.max_paragraph_len
+            pe_sel_input_ids_b.append(torch.tensor(pe_sel_input_ids_b_f).long())
+
+        print("pe_sel_input_ids_b", pe_sel_input_ids_b)
+        # pe_sel_input_idsを生成
+        pe_sel_input_ids = torch.stack(pe_sel_input_ids_b).to(self.device)
+        pe_sel_indices = torch.stack(pe_sel_index).to(self.device)
+        persona_pred = pe_sel_indices  # persona_predも更新
+
+        # 設定が正しいか確認するコード
+        #print("pe_sel_input_ids.shape:", pe_sel_input_ids.shape)
+        #print("pe_sel_indices.shape:", pe_sel_indices.shape)
+        #print("persona_pred.shape:", persona_pred.shape)
+
+        # 値の確認
+        #print("pe_sel_input_ids[0]:", pe_sel_input_ids[0])  # バッチ0のpersona input_idsの確認
+        #print("pe_sel_indices[0]:", pe_sel_indices[0])  # バッチ0のpersona選択インデックスの確認
+        #print("persona_pred[0]:", persona_pred[0])  # persona_predのバッチ0の内容確認
+
+        # デバッグ出力
+        #print("Grounding value:", grounding_value)
+        #print("pe_empty_index:", pe_empty_index)
+
+        #print("persona_grounding:", persona_grounding)
+        #print("persona_pred:", persona_pred)
+        
+        #false
+        """bsz = persona_input_ids.size()[0]
+        pe_sel_input_ids_b = []
+        pe_sel_index = []
+        for bs in range(bsz):
+            # デバイス上でゼロのテンソルを作成
+            pe_empty_index = torch.zeros([self.args.persona_num], device=self.device)
+            
+            # 各バッチのpersona_groundingを取得し、ビット反転させる
+            grounding_value = persona_grounding[bs]
+            inverted_grounding_value = ~grounding_value.bool()  # persona_groundingを反転
+            
+            # デバッグ用の出力
+            print("Original grounding value for batch", bs, ":", grounding_value)
+            print("Inverted grounding value for batch", bs, ":", inverted_grounding_value)
+            print("pe_empty_index before assignment:", pe_empty_index)
+            
+            # persona_groundingの反転値に基づいて選択
+            if inverted_grounding_value.sum().item() != 0:  # 反転したpersona_groundingが全て0でない場合
+                pe_empty_index[inverted_grounding_value] = 1  # inverted_grounding_valueが1のインデックスを1に設定
+                #pe_sel_input_ids_b_f = persona_input_ids[bs, :, :][0]  # persona_groundingに基づいて選択
+                # inverted_grounding_value に基づく複数の persona 候補を取得
+                pe_sel_input_ids_b_f = persona_input_ids[bs, inverted_grounding_value, :]
+
+                pe_sel_input_ids_b_f = pe_sel_input_ids_b_f[pe_sel_input_ids_b_f != self.tokenizer.question_encoder.pad_token_id].detach().tolist()
+                
+                # persona_predとして選択されたインデックスを追加
+                pe_sel_index.append(pe_empty_index)
+            else:
+                pe_sel_input_ids_b_f = []
+                pe_sel_index.append(pe_empty_index)  # 0のインデックスを追加
+            
+            # デバッグ用の出力
+            print("pe_empty_index after assignment:", pe_empty_index)
+            
+            # 必要に応じてパディングを追加して長さを調整
+            candidate_padding_length = self.args.max_paragraph_len - len(pe_sel_input_ids_b_f)
+            
+            if candidate_padding_length > 0:
+                pe_sel_input_ids_b_f += [self.tokenizer.question_encoder.pad_token_id] * candidate_padding_length
+            else:
+                pe_sel_input_ids_b_f = pe_sel_input_ids_b_f[:self.args.max_paragraph_len]
+            
+            assert len(pe_sel_input_ids_b_f) == self.args.max_paragraph_len
+            pe_sel_input_ids_b.append(torch.tensor(pe_sel_input_ids_b_f).long())
+
+        # pe_sel_input_idsとpe_sel_indicesを生成し、デバイスに転送
+        pe_sel_input_ids = torch.stack(pe_sel_input_ids_b).to(self.device)
+        pe_sel_indices = torch.stack(pe_sel_index).to(self.device)
+        persona_pred = pe_sel_indices  # persona_predも更新
+
+        # 結果を確認
+        print("pe_sel_input_ids.shape:", pe_sel_input_ids.shape)
+        print("pe_sel_indices.shape:", pe_sel_indices.shape)
+        print("persona_pred.shape:", persona_pred.shape)
+        print("pe_sel_input_ids[0]:", pe_sel_input_ids[0])
+        print("pe_sel_indices[0]:", pe_sel_indices[0])
+        print("persona_pred[0]:", persona_pred[0])
+
+        print("persona_grounding:", persona_grounding)
+        print("persona_pred:", persona_pred)"""
+
+
+        # new_input を作成
         new_input = torch.cat((input_ids[:, -312:], pe_sel_input_ids, kn_sel_input_ids), 1)
+
         question_hidden_states = self.backbone_model.question_encoder(new_input)[0]
         docs_dict = self.retriever(new_input.detach().cpu().numpy(), question_hidden_states.detach().cpu().numpy(),
                                    return_tensors="pt")
