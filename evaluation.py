@@ -1,23 +1,28 @@
 import os
 import json
 import logging
+import evaluate
+from torch.optim.optimizer import Args
 from tqdm import tqdm
+import argparse
 
 import torch
 from torch.utils.data import DataLoader
-from utils.general_utils import DATASET_CLASSES, GPU_KEYS
+from utils.general_utils import DATASET_CLASSES, GPU_KEYS,MODEL_CLASSES,TOKENIZER_CLASSES,MODEL_PROCESSORS,DATA_PROCESSORS
 #from datasets import load_metric
 from evaluate import load
 from rouge_score import rouge_scorer
-
+from attrdict import AttrDict
 
 #from torchmetrics import Accuracy
 from torchmetrics.classification import Accuracy
-
+#追加
+from transformers import RagModel, AutoTokenizer, RagTokenizer
 logger = logging.getLogger(__name__)
 from transformers import (
     RagConfig
 )
+
 
 map_config = {
     'rag-tok-ct': RagConfig,
@@ -88,7 +93,6 @@ class Evaluation(object):
         self.bert_config = map_config[self.args.model].from_pretrained(
             self.args.backbone,
         )
-        
         self.p_accuracy = Accuracy(num_classes=2, task="multiclass").to(self.device)
         self.k_accuracy = Accuracy(num_classes=10,task="multiclass").to(self.device)
         self.chrf_metric = load("chrf")
@@ -97,6 +101,9 @@ class Evaluation(object):
         self.bleu_metric = load("sacrebleu")
         self.f1_p = load("f1")
         self.f1_uni = load("chrf")
+        self.precision_p = load("precision")
+        self.recall_p = load("recall")
+
 
     def evaluate(self, model, epoch, typ):
         metrics = self.evaluate_rag(model, epoch, typ)
@@ -118,6 +125,9 @@ class Evaluation(object):
         h5 = 0
         f1_persona = 0
         unif1 = 0
+        #追加
+        precision_p = 0
+        recall_p = 0
     
         logger.info("Starting Evaluation %s" % typ)
         model.eval()
@@ -129,6 +139,11 @@ class Evaluation(object):
                       newline='') as fw:
                 tqdm_batch_iterator = tqdm(self.data_map[typ])
                 qual_outputs = []
+                #分析用の出力
+                incorrect_knowledge = []
+                incorrect_persona = []
+                incorrect_em_persona = []
+
                 for batch_idx, batch in enumerate(tqdm_batch_iterator):
                     for b_k in batch:
                         if b_k in self.keys_for_device:
@@ -139,19 +154,53 @@ class Evaluation(object):
                     persona_pred, k_index, r2_indices, r5_indices, pred= model.evaluate(batch)
                     
                     text_pred = pred
+                    #text_pred = [pred]
                     text_target = self.tokenizer.decode(gold[0], skip_special_tokens=True)
-                    
-                    #入力のtypeの確認
-                    print(f"text_pred type: {type(text_pred)}")
-                    print(f"text_target type: {type(text_target)}")
-                    print(f"text_pred: {text_pred}")
-                    print(f"text_target: {text_target}")
-                    # 
+              
                     
                     if text_target != "":
+                        #when persona is incorrect
+                        if not torch.equal(persona_pred, p_label):
+                          # p_label内で "1" になっている要素のインデックスを取得
+                          incorrect_indices = [i for i, label in enumerate(p_label[0]) if label == 1 and persona_pred[0][i] != 1]
+
+                          # "1" の予測が外れた部分のみ記録
+                          if incorrect_indices:
+                              incorrect_persona.append({
+                            "dialogID" : batch["dialogID"][0],
+                            "persona_pred" : persona_pred.detach().tolist(),
+                            "persona_grounding": p_label.detach().tolist(),
+                            "persona_candidates": batch["raw_persona_cand"],
+                            "predicted_utterance": text_pred,
+                            "ground_truth_utterance": text_target
+                          })
+                      
+                          incorrect_em_persona.append({
+                          "dialogID" : batch["dialogID"][0],
+                          "persona_pred" : persona_pred.detach().tolist(),
+                          "persona_grounding": p_label.detach().tolist(),
+                          "persona_candidates": batch["raw_persona_cand"],
+                          "predicted_utterance": text_pred,
+                          "ground_truth_utterance": text_target
+                        })
+                        #when knowlege is incorrect
+                        if k_label.item() not in r2_indices[0].detach().tolist() and k_label.item() not in r5_indices[0].detach().tolist():
+                            incorrect_knowledge.append({
+                            "dialogID": batch["dialogID"][0],
+                            "knowledge_pred": batch["raw_knowledge_cand"][0][k_index[0][0]],
+                            "knowledge_pred_index": [k_index[0].detach().tolist()],
+                            "knowledge_answer" : [k_label.detach().tolist()],
+                            "knowledge_grounding": batch["raw_knowledge_cand"][0][k_label[0]],
+                            "predicted_utterance": text_pred,
+                            "ground_truth_utterance": text_target
+                        })
+
                         self.k_accuracy.update(k_index[0], k_label)
                         self.p_accuracy.update(persona_pred, p_label)
                         f1_persona += self.f1_p.compute(predictions=persona_pred[0], references=p_label[0])["f1"]
+                        precision_p += self.precision_p.compute(predictions=persona_pred[0], references=p_label[0])["precision"]
+                        recall_p += self.recall_p.compute(predictions=persona_pred[0], references=p_label[0])["recall"]
+
                         if k_label.item() in r2_indices[0].detach().tolist():
                             h2 += 1
                         if k_label.item() in r5_indices[0].detach().tolist():
@@ -203,27 +252,38 @@ class Evaluation(object):
                 h5_f = h5 / len(qual_outputs)
                 pf1 = f1_persona / len(qual_outputs)
                 unif1_f = unif1 / len(qual_outputs)
+                precision_p = precision_p / len(qual_outputs)
+                recall_p = recall_p / len(qual_outputs)
             
                 metrics = {
-                    "k_acc": knowledge_acc_f.item(),
-                    "p_acc": persona_acc_f.item(),
-                    "p_f1": pf1,
-                    "hit@2": h2_f,
-                    "hit@5": h5_f,
-                    "bleu": bleu4_f,
-                    "rouge1": rouge1_f,
-                    "rouge2": rouge2_f,
-                    "rougel": rougel_f,
-                    "charf1": charf_f,
-                    "unif1": unif1_f,
+                    "k_acc": "%2.5f" % knowledge_acc_f.item(),
+                    "p_acc": "%2.5f" % persona_acc_f.item(),
+                    "p_f1": "%2.5f" % pf1,
+                    "hit@2": "%2.5f" % h2_f,
+                    "hit@5": "%2.5f" % h5_f,
+                    "bleu": "%2.5f" % bleu4_f,
+                    "rouge1": "%2.5f" % rouge1_f,
+                    "rouge2": "%2.5f" % rouge2_f,
+                    "rougel": "%2.5f" % rougel_f,
+                    "charf1": "%2.5f" % charf_f,
+                    "unif1": "%2.5f" % unif1_f,
+                    "p_precision": "%2.5f" %precision_p,
+                    "p_recall": "%2.5f" %recall_p,
                 
                 }
             
                 logging.info(
-                    '%s Knowledge Accuracy: %2.5f | Persona Accuracy: %2.5f | Persona F1: %2.5f |BLEU : %2.5f | ROUGE1 : %2.5f | ROUGE2 : %2.5f | ROUGEL : %2.5f | CHARF1 : %2.5f | UniF1 : %2.5f'
-                    % (typ, knowledge_acc_f.item(), persona_acc_f.item(), pf1, bleu4_f,
+                    '%s Knowledge Accuracy: %2.5f | Persona Accuracy: %2.5f | Persona F1: %2.5f | P_Precision: %2.5f | P_Recall: %2.5f | BLEU : %2.5f | ROUGE1 : %2.5f | ROUGE2 : %2.5f | ROUGEL : %2.5f | CHARF1 : %2.5f | UniF1 : %2.5f'
+                    % (typ, knowledge_acc_f.item(), persona_acc_f.item(), pf1, precision_p, recall_p, bleu4_f,
                        rouge1_f, rouge2_f, rougel_f, charf_f, unif1_f))
         
+                # 誤分類されたデータをJSONとして保存
+                with open("incorrect_persona_predictions.json", 'w') as fp:
+                  json.dump(incorrect_persona, fp, indent=2)
+                with open("incorrect_em_persona_predictions.json", 'w') as fp:
+                  json.dump(incorrect_em_persona, fp, indent=2)
+                with open("incorrect_knowledge_predictions.json", 'w') as fk:
+                  json.dump(incorrect_knowledge, fk, indent=2)
             return metrics
 
     
@@ -245,6 +305,7 @@ class Evaluation(object):
                             batch[b_k] = batch[b_k].to(self.device)
                     persona_pred, k_index, r2_indices, r5_indices, pred = model.inference(batch)
                     text_pred = pred
+
                 
                     qual_output = {
                         "dialogID": batch["dialogID"][0],
@@ -263,100 +324,89 @@ class Evaluation(object):
                     "qualitative_results": qual_outputs
                 }, fw, indent=2)
 
-            
-def eval_file(path, gpu_ids):
-    with open(path, "r") as f:
-        data = json.load(f)["qualitative_results"]
-    # move the metric to device you want computations to take place
-    device = "cuda:"+str(gpu_ids)
-    p_accuracy = Accuracy(num_classes=2,task="multiclass").to(device)
-    k_accuracy = Accuracy(num_classes=10,task="multiclass").to(device)
-    bleu_metric = load("sacrebleu")
-    bleu1_metric = load("bleu")
-    
-    chrf = load("chrf")
-    rouge = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
-    #rouge = load('rouge')
-    berts = load('bertscore')
-    f1_p = load("f1")
-    f1_uni = load("chrf")
+class Config:
+    """コンフィグを表すクラス"""
+    def __init__(self, **entries):
+        self.__dict__.update(entries)
 
-    rouge1 = 0
-    rouge2 = 0
-    rougel = 0
-    charf1 = 0
-    bleu = 0
-    bleu1 = 0
-    bert_score = 0
-    bleurt_score = 0
-    f1_persona = 0
-    unif1 = 0
-    for qi, qual in enumerate(data):
-        text_pred = qual["predicted_utterance"][0]
-        text_target = qual["ground_truth_utterance"]
-        if "wgt" in path:
-            p_index = torch.tensor(qual["persona_pred"][0]).to(device)
-            p_label = torch.tensor(qual["persona_grounding"]).to(device)
-            
-            k_index = torch.tensor(qual["knowledge_pred_index"][0]).to(device)
-            k_label = torch.tensor([qual["knowledge_answer_index"]]).to(device)
-        else:
-            p_index = torch.tensor([0]).to(device)
-            p_label = torch.tensor([0]).to(device)
+def load_model_and_tokenizer(config):
+    """モデルとトークナイザーを読み込む関数"""
+    # デバイスの設定
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     
-            k_index = torch.tensor([0]).to(device)
-            k_label = torch.tensor([0]).to(device)
-        bleu += bleu_metric.compute(predictions=text_pred, references=[text_target])['score']
-        charf1 += chrf.compute(predictions=text_pred, references = [text_target], word_order=2)['score']
-        #r = rouge.compute(predictions=[text_pred], references=[text_target])
-        r = rouge.score(text_pred, text_target)
-        f1_persona += f1_p.compute(predictions=p_index, references=p_label)["f1"]
-        unif1 += f1_uni.compute(predictions=text_pred, references=[text_target], word_order=1, char_order=0)[
-            'score']
-        bleu1 += bleu1_metric.compute(predictions=text_pred, references=[text_target], max_order=1)["bleu"]
-        
-        k_accuracy.update(k_index.detach(), k_label.detach())
-        p_accuracy.update(p_index, p_label)
-        rouge1 += r['rouge1'].fmeasure
-        rouge2 += r['rouge2'].fmeasure
-        rougel += r['rougeL'].fmeasure
-        #rouge1 += r['rouge1'].mid.fmeasure
-        #rouge2 += r['rouge2'].mid.fmeasure
-        #rougel += r['rougeL'].mid.fmeasure
-        bert_score += berts.compute(predictions=text_pred, references=[text_target], lang="en")["f1"][0]
 
-    knowledge_acc_f = k_accuracy.compute()
-    persona_acc_f = p_accuracy.compute()
-    
-    f1_persona_f = f1_persona / len(data)
-    rouge1_f = rouge1 / len(data)
-    rouge2_f = rouge2 / len(data)
-    rougel_f = rougel / len(data)
-    bleu4_f = bleu / len(data)
-    charf1_f = charf1 / len(data)
-    bert_score_f = bert_score / len(data)
-    bleurt_score_f = bleurt_score / len(data)
-    unif1_f = unif1 / len(data)
-    bleu1_f = bleu1 / len(data)
-    metrics = {
-        "k_acc": knowledge_acc_f.item(),
-        "p_acc": persona_acc_f.item(),
-        "p_f1" : f1_persona_f,
-        "bleu": bleu4_f,
-        "bleu1": bleu1_f,
-        "rouge1": rouge1_f,
-        "rouge2": rouge2_f,
-        "rougel": rougel_f,
-        "charf1": charf1_f,
-        "bert_score": bert_score_f,
-        "bleurt_score": bleurt_score_f,
-        "uni_f1": unif1_f,
-        
+    print("Loading model and tokenizer...")
+    print("Config:", config)
 
+    # 辞書からオブジェクトに変換
+    args = Config(**config)
+    args.device = device
+
+    model_class = MODEL_CLASSES[config["model"]]
+    tokenizer = TOKENIZER_CLASSES[config["model"]].from_pretrained(config["backbone"])
+    print("Tokenizer loaded successfully.")
+
+
+    # トークン数の計算（retrieverとgeneratorに分ける場合）
+    ret_orig_num_tokens = len(tokenizer.question_encoder)
+    ret_num_added_tokens = 0  # 必要に応じて調整
+    gen_orig_num_tokens = len(tokenizer.generator)
+    gen_num_added_tokens = 0  # 必要に応じて調整
+
+    add_tokens = {
+        "retriever": ret_orig_num_tokens + ret_num_added_tokens,
+        "generator": gen_orig_num_tokens + gen_num_added_tokens
     }
-    print(metrics)
+
+    # モデルの初期化
+    model = model_class(args=args,tokenizer=tokenizer, num_tokens_to_add=add_tokens, device=device)
+    print(args.backbone)
+    # 学習済みモデルのパス
+    model_path = config['load_pthpath']  # ここで .pth ファイルのパスを指定
+    if model_path:
+        print(f"Loading model weights from {model_path}")
+        checkpoint = torch.load(model_path, map_location=device)
+        
+        if 'model' in checkpoint:
+          state_dict = checkpoint['model']
+        else:
+          state_dict = checkpoint
+
+        model.load_state_dict(state_dict, strict=True)
+        print("Model weights loaded successfully.")
 
 
-if __name__ == "__main__":
-    qual_path = "valid_qualitative_results_5.json"
-    eval_file(qual_path, 2)
+    print("State dict keys (first 5):", list(model.state_dict().keys())[:5])
+    # デバイスに移動
+    model.to(device)
+    
+    return model, tokenizer,args
+
+if __name__ == '__main__':
+    # 設定ファイルの読み込み
+    with open("/content/drive/MyDrive/B4yokosawa/INFO/config/rag-tok-base-ct.json") as f:
+        config = json.load(f)
+
+    # モデルとトークナイザーを読み込む
+    model, tokenizer,args = load_model_and_tokenizer(config)
+    #device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+    # モデルとトークナイザーの初期化が成功したか確認
+    print("Model and tokenizer loaded successfully.")
+    task = config['task']  # 設定ファイルからタスクを取得
+    model_type = config['model']  # 設定ファイルからモデルタイプを取得
+    print(task,model_type)
+
+
+    # DataProcessor や ModelProcessor の初期化
+    #data_processor = DATA_PROCESSORS[config[args.task]](args, tokenizer)  # "pkchat" を想定
+    #model_processor = MODEL_PROCESSORS[config[args.model]](args, tokenizer, args.device, data_processor, None)  # "rag-tok-ct" を想定
+    data_processor = DATA_PROCESSORS[task](args, tokenizer)  # "pkchat" を想定
+    model_processor = MODEL_PROCESSORS[model_type](args, tokenizer, args.device, data_processor, None)  # "rag-tok-ct" を想定
+
+    # 評価オブジェクトを作成
+    evaluation = Evaluation(args, tokenizer, data_processor, model_processor)
+
+    # モデルを指定して評価を実行
+    metrics = evaluation.evaluate(model, epoch=3, typ="valid")  # validまたはtestを選択
+    print(metrics)  # 結果を表示
