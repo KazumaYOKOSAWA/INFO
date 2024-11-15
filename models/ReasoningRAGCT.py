@@ -427,26 +427,33 @@ class ReasoningRAGCT(nn.Module):
         #知識を消してみる
         #new_input = torch.cat((input_ids[:, -312:], pe_sel_input_ids), 1)
 
-        question_hidden_states = self.backbone_model.question_encoder(new_input)[0]
+        """question_hidden_states = self.backbone_model.question_encoder(new_input)[0]
         docs_dict = self.retriever(new_input.detach().cpu().numpy(), question_hidden_states.detach().cpu().numpy(),
                                    return_tensors="pt")
         docs_dict = {dd: docs_dict[dd].to(self.device) for dd in docs_dict}
         
         doc_scores = torch.bmm(
-            question_hidden_states.unsqueeze(1), docs_dict["retrieved_doc_embeds"].float().transpose(1, 2)).squeeze(1)
+            question_hidden_states.unsqueeze(1), docs_dict["retrieved_doc_embeds"].float().transpose(1, 2)).squeeze(1)"""
+            
+        context_attention_mask = (new_input != 0).long()
 
         gen_outputs = self.backbone_model(
-            context_input_ids=docs_dict["context_input_ids"],
-            context_attention_mask=docs_dict["context_attention_mask"],
-            doc_scores=doc_scores,
+            #context_input_ids=docs_dict["context_input_ids"],
+            #context_attention_mask=docs_dict["context_attention_mask"],
+            context_input_ids=new_input,
+            context_attention_mask=context_attention_mask,
+            #doc_scores=doc_scores,
             decoder_input_ids=decoder_input_ids,
             labels=decoder_input_ids,
-            output_retrieved=True,
+            #output_retrieved=True,
         )
         generated = self.backbone_model.generate(
-            context_input_ids=docs_dict["context_input_ids"],
-            context_attention_mask=docs_dict["context_attention_mask"],
-            doc_scores=doc_scores )
+            #context_input_ids=docs_dict["context_input_ids"],
+            #context_attention_mask=docs_dict["context_attention_mask"],
+            context_input_ids=new_input,
+            context_attention_mask=context_attention_mask,
+            #doc_scores=doc_scores 
+            )
 
         try:
             print("input")
@@ -471,7 +478,7 @@ class ReasoningRAGCT(nn.Module):
         
         return persona_pred, r1_indices, r2_indices, r5_indices, pred_gen
     
-    def inference(self, batch):
+    """def inference(self, batch):
         input_ids = batch["input_ids"]
         input_attn_mask = batch["input_attn_mask"]
         decoder_input_ids = batch["decoder_input_ids"]
@@ -575,4 +582,4 @@ class ReasoningRAGCT(nn.Module):
         r2_indices = torch.topk(kn_logits, 2)[1]  # R 2 @ 100
         r5_indices = torch.topk(kn_logits, 5)[1]  # R 5 @ 100
 
-        return persona_pred, r1_indices, r2_indices, r5_indices, pred_gen
+        return persona_pred, r1_indices, r2_indices, r5_indices, pred_gen"""
