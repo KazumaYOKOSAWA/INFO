@@ -135,7 +135,7 @@ class Evaluation(object):
             os.makedirs(os.path.join(os.path.dirname(self.args.save_dirpath), self.args.tb_prefix),
                         exist_ok=True)
             with open(os.path.join(os.path.dirname(self.args.save_dirpath), self.args.tb_prefix,
-                                   typ + f'_qualitative_test_results_{epoch}.json'), 'w',
+                                   typ + f'_qualitative_test1_results_{epoch}.json'), 'w',
                       newline='') as fw:
                 tqdm_batch_iterator = tqdm(self.data_map[typ])
                 qual_outputs = []

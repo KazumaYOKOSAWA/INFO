@@ -197,13 +197,13 @@ class ReasoningRAGCT(nn.Module):
                                          responses_input_masks=persona_attn_mask)
 
         pe_loss = self.pe_loss_fct(pe_logits, persona_grounding.float())
-        
-        
+
         persona_num_logits = self.pe_controller(
             input_ids=input_ids,
             attention_mask=input_attn_mask,
             return_dict=True,
         )["pooler_output"]
+
         persona_num_pred_logit = self.pe_predictor(persona_num_logits)
         persona_num_pred = self.softmax(persona_num_pred_logit)
         
@@ -301,7 +301,7 @@ class ReasoningRAGCT(nn.Module):
         persona_num_pred = self.softmax(persona_num_pred_logit)
         
         persona_num = torch.argmax(persona_num_pred, 1).detach().tolist()
-        """bsz = persona_input_ids.size()[0]
+        bsz = persona_input_ids.size()[0]
         pe_sel_input_ids_b = []
         pe_sel_index = []
         for bs in range(bsz):
@@ -331,21 +331,8 @@ class ReasoningRAGCT(nn.Module):
         pe_sel_indices = torch.stack(pe_sel_index).to(self.device)
         persona_pred = pe_sel_indices  # persona_predも更新
 
-        # 設定が正しいか確認するコード
-        print("pe_sel_input_ids.shape:", pe_sel_input_ids.shape)
-        print("pe_sel_indices.shape:", pe_sel_indices.shape)
-        print("persona_pred.shape:", persona_pred.shape)
-
-        # 値の確認
-        print("pe_sel_input_ids[0]:", pe_sel_input_ids[0])  # バッチ0のpersona input_idsの確認
-        print("pe_sel_indices[0]:", pe_sel_indices[0])  # バッチ0のpersona選択インデックスの確認
-        print("persona_pred[0]:", persona_pred[0])  # persona_predのバッチ0の内容確認
-
-        print("persona_grounding:", persona_grounding)
-        print("persona_pred:", persona_pred)"""
-
         #True
-        bsz = persona_input_ids.size()[0]
+        """bsz = persona_input_ids.size()[0]
         pe_sel_input_ids_b = []
         pe_sel_index = []
         for bs in range(bsz):
@@ -381,24 +368,7 @@ class ReasoningRAGCT(nn.Module):
         # pe_sel_input_idsを生成
         pe_sel_input_ids = torch.stack(pe_sel_input_ids_b).to(self.device)
         pe_sel_indices = torch.stack(pe_sel_index).to(self.device)
-        persona_pred = pe_sel_indices  # persona_predも更新
-
-        # 設定が正しいか確認するコード
-        #print("pe_sel_input_ids.shape:", pe_sel_input_ids.shape)
-        #print("pe_sel_indices.shape:", pe_sel_indices.shape)
-        #print("persona_pred.shape:", persona_pred.shape)
-
-        # 値の確認
-        #print("pe_sel_input_ids[0]:", pe_sel_input_ids[0])  # バッチ0のpersona input_idsの確認
-        #print("pe_sel_indices[0]:", pe_sel_indices[0])  # バッチ0のpersona選択インデックスの確認
-        #print("persona_pred[0]:", persona_pred[0])  # persona_predのバッチ0の内容確認
-
-        # デバッグ出力
-        #print("Grounding value:", grounding_value)
-        #print("pe_empty_index:", pe_empty_index)
-
-        #print("persona_grounding:", persona_grounding)
-        #print("persona_pred:", persona_pred)
+        persona_pred = pe_sel_indices  # persona_predも更新"""
         
         #false
         """bsz = persona_input_ids.size()[0]
@@ -449,22 +419,13 @@ class ReasoningRAGCT(nn.Module):
         # pe_sel_input_idsとpe_sel_indicesを生成し、デバイスに転送
         pe_sel_input_ids = torch.stack(pe_sel_input_ids_b).to(self.device)
         pe_sel_indices = torch.stack(pe_sel_index).to(self.device)
-        persona_pred = pe_sel_indices  # persona_predも更新
-
-        # 結果を確認
-        print("pe_sel_input_ids.shape:", pe_sel_input_ids.shape)
-        print("pe_sel_indices.shape:", pe_sel_indices.shape)
-        print("persona_pred.shape:", persona_pred.shape)
-        print("pe_sel_input_ids[0]:", pe_sel_input_ids[0])
-        print("pe_sel_indices[0]:", pe_sel_indices[0])
-        print("persona_pred[0]:", persona_pred[0])
-
-        print("persona_grounding:", persona_grounding)
-        print("persona_pred:", persona_pred)"""
+        persona_pred = pe_sel_indices  # persona_predも更新"""
 
 
         # new_input を作成
         new_input = torch.cat((input_ids[:, -312:], pe_sel_input_ids, kn_sel_input_ids), 1)
+        #知識を消してみる
+        #new_input = torch.cat((input_ids[:, -312:], pe_sel_input_ids), 1)
 
         question_hidden_states = self.backbone_model.question_encoder(new_input)[0]
         docs_dict = self.retriever(new_input.detach().cpu().numpy(), question_hidden_states.detach().cpu().numpy(),
