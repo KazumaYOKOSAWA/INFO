@@ -217,7 +217,7 @@ class CustomChatModel(object):
                 
                 if lm_cnt != 0:
                     self.tb_writer.add_scalar('LM_loss', lm_loss / lm_cnt, lm_cnt)
-                    self.tb_writer.add_scalar('Knoweldge_loss', kn_loss / kn_cnt, kn_cnt)
+                    self.tb_writer.add_scalar('Knowledge_loss', kn_loss / kn_cnt, kn_cnt)
                     self.tb_writer.add_scalar('Persona_loss', ps_loss / ps_cnt, ps_cnt)
                 
                 loss.backward()
@@ -336,7 +336,7 @@ class CustomChatModel(object):
         
         torch.cuda.empty_cache()
         
-    def inference(self):
+    """def inference(self):
         print(glob.glob(os.path.join(self.checkpoint_manager.ckpt_dirpath, "*.pth")))
         
         model_state_dict, optimizer_state_dict = load_checkpoint(
@@ -353,7 +353,7 @@ class CustomChatModel(object):
         print("Inference..")
         
         self.model.eval()
-        self.evaluation.inference(self.model, 'inf')
+        self.evaluation.inference(self.model, 'inf')"""
 
 
 if __name__ == '__main__':

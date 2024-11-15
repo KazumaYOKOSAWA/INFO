@@ -15,7 +15,7 @@ from rouge_score import rouge_scorer
 from attrdict import AttrDict
 
 #from torchmetrics import Accuracy
-from torchmetrics.classification import Accuracy
+from torchmetrics.classification import Accuracy, BinaryRecall, BinaryF1Score, BinaryPrecision
 #追加
 from transformers import RagModel, AutoTokenizer, RagTokenizer
 logger = logging.getLogger(__name__)
@@ -95,14 +95,13 @@ class Evaluation(object):
         )
         self.p_accuracy = Accuracy(num_classes=2, task="multiclass").to(self.device)
         self.k_accuracy = Accuracy(num_classes=10,task="multiclass").to(self.device)
-        self.chrf_metric = load("chrf")
-        #self.rouge = load('rouge')
+        self.chrf_metric = evaluate.load("chrf")
         self.rouge = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
-        self.bleu_metric = load("sacrebleu")
-        self.f1_p = load("f1")
-        self.f1_uni = load("chrf")
-        self.precision_p = load("precision")
-        self.recall_p = load("recall")
+        self.bleu_metric = evaluate.load("sacrebleu")
+        self.f1_uni = evaluate.load("chrf")
+        self.f1_p = BinaryF1Score().to(self.device)
+        self.precision_p = BinaryPrecision().to(self.device)
+        self.recall_p = BinaryRecall().to(self.device)
 
 
     def evaluate(self, model, epoch, typ):
@@ -115,6 +114,9 @@ class Evaluation(object):
     def evaluate_rag(self, model, epoch, typ='valid'):
         self.p_accuracy.reset()
         self.k_accuracy.reset()
+        self.recall_p.reset()
+        self.f1_p.reset()
+        self.precision_p.reset()
     
         bleu = 0
         charf = 0
@@ -125,17 +127,14 @@ class Evaluation(object):
         h5 = 0
         f1_persona = 0
         unif1 = 0
-        #追加
-        precision_p = 0
-        recall_p = 0
-    
+        
         logger.info("Starting Evaluation %s" % typ)
         model.eval()
         with torch.no_grad():
             os.makedirs(os.path.join(os.path.dirname(self.args.save_dirpath), self.args.tb_prefix),
                         exist_ok=True)
             with open(os.path.join(os.path.dirname(self.args.save_dirpath), self.args.tb_prefix,
-                                   typ + f'_qualitative_test1115_results_{epoch}.json'), 'w',
+                                   typ + f'_qualitative_withoutrag_results_{epoch}.json'), 'w',
                       newline='') as fw:
                 tqdm_batch_iterator = tqdm(self.data_map[typ])
                 qual_outputs = []
@@ -199,9 +198,9 @@ class Evaluation(object):
                         #persona_pred = 1 - p_label
                         self.k_accuracy.update(k_index[0], k_label)
                         self.p_accuracy.update(persona_pred, p_label)
-                        f1_persona += self.f1_p.compute(predictions=persona_pred[0], references=p_label[0])["f1"]
-                        precision_p += self.precision_p.compute(predictions=persona_pred[0], references=p_label[0])["precision"]
-                        recall_p += self.recall_p.compute(predictions=persona_pred[0], references=p_label[0])["recall"]
+                        self.recall_p.update(persona_pred, p_label)
+                        self.precision_p.update(persona_pred, p_label)
+                        self.f1_p.update(persona_pred, p_label)
 
                         if k_label.item() in r2_indices[0].detach().tolist():
                             h2 += 1
@@ -244,6 +243,9 @@ class Evaluation(object):
                 # metric on all batches using custom accumulation
                 knowledge_acc_f = self.k_accuracy.compute()
                 persona_acc_f = self.p_accuracy.compute()
+                precision_p = self.precision_p.compute()
+                recall_p = self.recall_p.compute()
+                pf1 = self.f1_p.compute()
                 
                 bleu4_f = bleu / len(qual_outputs)
                 rouge1_f = rouge1 / len(qual_outputs)
@@ -252,15 +254,12 @@ class Evaluation(object):
                 charf_f = charf / len(qual_outputs)
                 h2_f = h2 / len(qual_outputs)
                 h5_f = h5 / len(qual_outputs)
-                pf1 = f1_persona / len(qual_outputs)
                 unif1_f = unif1 / len(qual_outputs)
-                precision_p = precision_p / len(qual_outputs)
-                recall_p = recall_p / len(qual_outputs)
             
                 metrics = {
                     "k_acc": "%2.5f" % knowledge_acc_f.item(),
                     "p_acc": "%2.5f" % persona_acc_f.item(),
-                    "p_f1": "%2.5f" % pf1,
+                    "p_f1": "%2.5f" % pf1.item(),
                     "hit@2": "%2.5f" % h2_f,
                     "hit@5": "%2.5f" % h5_f,
                     "bleu": "%2.5f" % bleu4_f,
@@ -269,8 +268,8 @@ class Evaluation(object):
                     "rougel": "%2.5f" % rougel_f,
                     "charf1": "%2.5f" % charf_f,
                     "unif1": "%2.5f" % unif1_f,
-                    "p_precision": "%2.5f" %precision_p,
-                    "p_recall": "%2.5f" %recall_p,
+                    "p_precision": "%2.5f" %precision_p.item(),
+                    "p_recall": "%2.5f" %recall_p.item(),
                 
                 }
             
@@ -289,7 +288,7 @@ class Evaluation(object):
             return metrics
 
     
-    def inference_rag(self, model, typ='inf'):
+    """def inference_rag(self, model, typ='inf'):
     
         logger.info("Starting Inference %s" % typ)
         model.eval()
@@ -324,7 +323,7 @@ class Evaluation(object):
             
                 json.dump({
                     "qualitative_results": qual_outputs
-                }, fw, indent=2)
+                }, fw, indent=2)"""
 
 class Config:
     """コンフィグを表すクラス"""
