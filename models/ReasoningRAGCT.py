@@ -298,7 +298,7 @@ class ReasoningRAGCT(nn.Module):
         pe_loss = self.pe_loss_fct(pe_logits, persona_grounding.float())
         kn_loss = self.kn_loss_fct(kn_logits, knowledge_grounding)
         kn_pred_idx = torch.argmax(kn_logits, 1)
-
+        del kn_logits
         kn_sel_input_ids = knowledge_input_ids[torch.arange(knowledge_input_ids.size(0)), kn_pred_idx]
         
         persona_num_logits = self.pe_controller(
@@ -336,6 +336,7 @@ class ReasoningRAGCT(nn.Module):
             assert len(pe_sel_input_ids_b_f) == self.args.max_paragraph_len
             pe_sel_input_ids_b.append(torch.tensor(pe_sel_input_ids_b_f).long())
         # pe_sel_input_idsを生成
+        del pe_logits
         pe_sel_input_ids = torch.stack(pe_sel_input_ids_b).to(self.device)
         pe_sel_indices = torch.stack(pe_sel_index).to(self.device)
         persona_pred = pe_sel_indices  # persona_predも更新
@@ -343,8 +344,9 @@ class ReasoningRAGCT(nn.Module):
 
         # new_input を作成
         new_input = torch.cat((input_ids[:, -312:], pe_sel_input_ids, kn_sel_input_ids), 1)
-
+        new_input = new_input.detach()
         question_hidden_states = self.backbone_model.question_encoder(new_input)[0]
+        question_hidden_states = question_hidden_states.detach()
         docs_dict = self.retriever(new_input.detach().cpu().numpy(), question_hidden_states.detach().cpu().numpy(),
                                    return_tensors="pt")
         docs_dict = {dd: docs_dict[dd].to(self.device) for dd in docs_dict}
