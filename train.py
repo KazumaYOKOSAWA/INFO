@@ -72,7 +72,8 @@ class CustomChatModel(object):
             num_workers=self.args.cpu_workers,
             shuffle=True,
             drop_last=True,
-            collate_fn=self.train_dataset.collate_fn
+            collate_fn=self.train_dataset.collate_fn,
+            pin_memory = True,
         )
         print(
             """
@@ -213,12 +214,19 @@ class CustomChatModel(object):
                 lm_loss, knowledge_loss, persona_loss = output["lm_loss"], output["knowledge_loss"], output[
                     "persona_loss"]
                 
+                  # ここで不要なテンソルを削除する
+                del forward_args  # 計算後に不要になった場合削除
+                del output  # 計算後に不要になった場合削除
+                            
                 loss = torch.sum(
                     torch.stack([lm_loss.clone() * self.args.lm_coef, knowledge_loss.clone() * self.args.kn_coef,
                                  persona_loss.clone() * self.args.ps_coef], axis=-1)) / self.args.virtual_batch_size
                 lm_loss += lm_loss.clone().item()
                 kn_loss += knowledge_loss.clone().item()
                 ps_loss += persona_loss.clone().item()
+                
+                 # lossの計算後に不要なテンソルを削除
+                del lm_loss, knowledge_loss, persona_loss  # 計算後に不要なら削除
                 
                 if lm_cnt != 0:
                     self.tb_writer.add_scalar('LM_loss', lm_loss / lm_cnt, lm_cnt)
@@ -232,6 +240,11 @@ class CustomChatModel(object):
                 kn_cnt += 1
                 ps_cnt += 1
                 accu_batch += batch["input_ids"].shape[0]
+                
+                # バッチの処理が終わった後にGPUからメモリ解放
+                del batch["input_ids"]
+                del batch["attention_mask"]
+                torch.cuda.empty_cache()
                 
                 if (self.args.virtual_batch_size == accu_batch) or (
                         batch_idx == (len(self.train_dataset) // self.args.batch_size)):  # last batch
