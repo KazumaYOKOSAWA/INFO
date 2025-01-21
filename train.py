@@ -181,13 +181,18 @@ class CustomChatModel(object):
         train_begin = datetime.utcnow()
         global_iteration_step = 0
         early_stop_count = self.args.early_stop_count
-        best_valid_bleu = 0.
-        
+        #best_valid_bleu = 0.
+        best_valid_bleu = float('-inf')
+
         print("Total number of iterations per epoch: %d" % self.iterations)
         print("Training...")
         lm_loss, lm_cnt = 0, 0
         kn_loss, kn_cnt = 0, 0
         ps_loss, ps_cnt = 0, 0
+
+        # 例: 10,000ステップで停止
+        max_steps = 1000  # 任意の停止ステップ数
+        global_iteration_step = 0
         
         for epoch in range(self.start_epoch, self.args.num_epochs + 1):
             self.model.train()
@@ -258,7 +263,13 @@ class CustomChatModel(object):
                         
                         metrics = self.evaluation.evaluate(self.model, epoch, 'valid')
                         print(metrics)
+
+                global_iteration_step += 1
                 
+                if global_iteration_step >= max_steps:
+                  print(f"Reached max steps: {max_steps}. Stopping training.")
+                  break  # 内側のループを抜ける
+                           
             
             # -------------------------------------------------------------------------
             #   ON EPOCH END  (checkpointing and validation)
@@ -302,7 +313,10 @@ class CustomChatModel(object):
                 
                 if early_stop_count == 0:
                     break
-        
+
+            if global_iteration_step >= max_steps:
+              break  # 外側のループも抜ける
+
         model_state_dict, optimizer_state_dict = load_checkpoint(
             glob.glob(os.path.join(self.checkpoint_manager.ckpt_dirpath, "*.pth"))[0])
         if isinstance(self.model, nn.DataParallel):
@@ -335,25 +349,6 @@ class CustomChatModel(object):
         print(metrics)
         
         torch.cuda.empty_cache()
-        
-    """def inference(self):
-        print(glob.glob(os.path.join(self.checkpoint_manager.ckpt_dirpath, "*.pth")))
-        
-        model_state_dict, optimizer_state_dict = load_checkpoint(
-            glob.glob(os.path.join(self.checkpoint_manager.ckpt_dirpath, "*.pth"))[0])
-        if isinstance(self.model, nn.DataParallel):
-            self.model.module.load_state_dict(model_state_dict)
-        else:
-            self.model.load_state_dict(model_state_dict)
-        
-        print("Saving Evaluation Results in ",
-              os.path.join(self.checkpoint_manager.ckpt_dirpath, "eval_results.txt"))
-        
-        print("Total number of iterations per epoch: %d" % self.iterations)
-        print("Inference..")
-        
-        self.model.eval()
-        self.evaluation.inference(self.model, 'inf')"""
 
 
 if __name__ == '__main__':

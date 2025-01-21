@@ -111,7 +111,8 @@ class Evaluation(object):
     def inference(self, model, typ):
         self.inference_rag(model, typ)
 
-    def evaluate_rag(self, model, epoch, typ='valid'):
+    #def evaluate_rag(self, model, epoch, typ='valid'):
+    def evaluate_rag(self, model, epoch, typ):      
         self.p_accuracy.reset()
         self.k_accuracy.reset()
         self.recall_p.reset()
@@ -134,16 +135,17 @@ class Evaluation(object):
             os.makedirs(os.path.join(os.path.dirname(self.args.save_dirpath), self.args.tb_prefix),
                         exist_ok=True)
             with open(os.path.join(os.path.dirname(self.args.save_dirpath), self.args.tb_prefix,
-                                   typ + f'_qualitative_withoutrag_results_{epoch}.json'), 'w',
+                                   typ + f'_qualitative_results_{epoch}.json'), 'w',
                       newline='') as fw:
                 tqdm_batch_iterator = tqdm(self.data_map[typ])
                 qual_outputs = []
-                #分析用の出力
-                incorrect_knowledge = []
-                incorrect_persona = []
-                incorrect_em_persona = []
+                 # 上位10件だけ処理する
+                max_batches = 5
 
                 for batch_idx, batch in enumerate(tqdm_batch_iterator):
+                    if batch_idx >= max_batches:  # 制限を超えたらループを終了
+                      break
+
                     for b_k in batch:
                         if b_k in self.keys_for_device:
                             batch[b_k] = batch[b_k].to(self.device)
@@ -158,41 +160,6 @@ class Evaluation(object):
               
                     
                     if text_target != "":
-                        #when persona is incorrect
-                        """if not torch.equal(persona_pred, p_label):
-                          # p_label内で "1" になっている要素のインデックスを取得
-                          incorrect_indices = [i for i, label in enumerate(p_label[0]) if label == 1 and persona_pred[0][i] != 1]
-
-                          # "1" の予測が外れた部分のみ記録
-                          if incorrect_indices:
-                              incorrect_persona.append({
-                            "dialogID" : batch["dialogID"][0],
-                            "persona_pred" : persona_pred.detach().tolist(),
-                            "persona_grounding": p_label.detach().tolist(),
-                            "persona_candidates": batch["raw_persona_cand"],
-                            "predicted_utterance": text_pred,
-                            "ground_truth_utterance": text_target
-                          })
-                      
-                          incorrect_em_persona.append({
-                          "dialogID" : batch["dialogID"][0],
-                          "persona_pred" : persona_pred.detach().tolist(),
-                          "persona_grounding": p_label.detach().tolist(),
-                          "persona_candidates": batch["raw_persona_cand"],
-                          "predicted_utterance": text_pred,
-                          "ground_truth_utterance": text_target
-                        })
-                        #when knowlege is incorrect
-                        if k_label.item() not in r2_indices[0].detach().tolist() and k_label.item() not in r5_indices[0].detach().tolist():
-                            incorrect_knowledge.append({
-                            "dialogID": batch["dialogID"][0],
-                            "knowledge_pred": batch["raw_knowledge_cand"][0][k_index[0][0]],
-                            "knowledge_pred_index": [k_index[0].detach().tolist()],
-                            "knowledge_answer" : [k_label.detach().tolist()],
-                            "knowledge_grounding": batch["raw_knowledge_cand"][0][k_label[0]],
-                            "predicted_utterance": text_pred,
-                            "ground_truth_utterance": text_target
-                        })"""
                         #debug
                         #print(persona_pred,p_label)
                         #persona_pred = 1 - p_label
@@ -202,11 +169,7 @@ class Evaluation(object):
                         self.precision_p.update(persona_pred, p_label)
                         self.f1_p.update(persona_pred, p_label)
 
-                        if k_label.item() in r2_indices[0].detach().tolist():
-                            h2 += 1
-                        if k_label.item() in r5_indices[0].detach().tolist():
-                            h5 += 1
-                        
+                           
                         bleu += self.bleu_metric.compute(predictions=text_pred, references=[text_target])['score']
                         charf += self.chrf_metric.compute(predictions=text_pred, references=[text_target])['score']
                         r = self.rouge.score(text_pred[0], text_target)
@@ -257,73 +220,27 @@ class Evaluation(object):
                 unif1_f = unif1 / len(qual_outputs)
             
                 metrics = {
-                    "k_acc": "%2.5f" % knowledge_acc_f.item(),
-                    "p_acc": "%2.5f" % persona_acc_f.item(),
-                    "p_f1": "%2.5f" % pf1.item(),
-                    "hit@2": "%2.5f" % h2_f,
-                    "hit@5": "%2.5f" % h5_f,
-                    "bleu": "%2.5f" % bleu4_f,
-                    "rouge1": "%2.5f" % rouge1_f,
-                    "rouge2": "%2.5f" % rouge2_f,
-                    "rougel": "%2.5f" % rougel_f,
-                    "charf1": "%2.5f" % charf_f,
-                    "unif1": "%2.5f" % unif1_f,
-                    "p_precision": "%2.5f" %precision_p.item(),
-                    "p_recall": "%2.5f" %recall_p.item(),
-                
+                    "k_acc": knowledge_acc_f.item(),
+                    "p_acc": persona_acc_f.item(),
+                    "p_f1": pf1.item(),
+                    "hit@2": h2_f,
+                    "hit@5": h5_f,
+                    "bleu": bleu4_f,
+                    "rouge1": rouge1_f,
+                    "rouge2": rouge2_f,
+                    "rougel": rougel_f,
+                    "charf1": charf_f,
+                    "unif1": unif1_f,
+                    "p_precision": precision_p.item(),
+                    "p_recall": recall_p.item(),
                 }
             
                 logging.info(
                     '%s Knowledge Accuracy: %2.5f | Persona Accuracy: %2.5f | Persona F1: %2.5f | P_Precision: %2.5f | P_Recall: %2.5f | BLEU : %2.5f | ROUGE1 : %2.5f | ROUGE2 : %2.5f | ROUGEL : %2.5f | CHARF1 : %2.5f | UniF1 : %2.5f'
                     % (typ, knowledge_acc_f.item(), persona_acc_f.item(), pf1, precision_p, recall_p, bleu4_f,
                        rouge1_f, rouge2_f, rougel_f, charf_f, unif1_f))
-        
-                # 誤分類されたデータをJSONとして保存
-                """with open("incorrect_persona_predictions.json", 'w') as fp:
-                  json.dump(incorrect_persona, fp, indent=2)
-                with open("incorrect_em_persona_predictions.json", 'w') as fp:
-                  json.dump(incorrect_em_persona, fp, indent=2)
-                with open("incorrect_knowledge_predictions.json", 'w') as fk:
-                  json.dump(incorrect_knowledge, fk, indent=2)"""
+      
             return metrics
-
-    
-    """def inference_rag(self, model, typ='inf'):
-    
-        logger.info("Starting Inference %s" % typ)
-        model.eval()
-        with torch.no_grad():
-            os.makedirs(os.path.join(os.path.dirname(self.args.save_dirpath), self.args.tb_prefix),
-                        exist_ok=True)
-            with open(os.path.join(os.path.dirname(self.args.save_dirpath), self.args.tb_prefix,
-                                   typ + f'_qualitative_results_{0}.json'), 'w',
-                      newline='') as fw:
-                tqdm_batch_iterator = tqdm(self.data_map[typ])
-                qual_outputs = []
-                for batch_idx, batch in enumerate(tqdm_batch_iterator):
-                    for b_k in batch:
-                        if b_k in self.keys_for_device:
-                            batch[b_k] = batch[b_k].to(self.device)
-                    persona_pred, k_index, r2_indices, r5_indices, pred = model.inference(batch)
-                    text_pred = pred
-
-                
-                    qual_output = {
-                        "dialogID": batch["dialogID"][0],
-                        "landmark_link": batch["landmark_link"][0],
-                        "dialog": batch["raw_dialog"][0],
-                        "knowledge_pred": batch["raw_knowledge_cand"][0][k_index[0][0]],
-                        "knowledge_pred_index": [k_index[0].detach().tolist()],
-                        "persona_pred": persona_pred.detach().tolist(),
-                        "persona_candidates": batch["raw_persona_cand"],
-                        "predicted_utterance": text_pred,
-                    
-                    }
-                    qual_outputs.append(qual_output)
-            
-                json.dump({
-                    "qualitative_results": qual_outputs
-                }, fw, indent=2)"""
 
 class Config:
     """コンフィグを表すクラス"""
@@ -377,7 +294,7 @@ def load_model_and_tokenizer(config):
         print("Model weights loaded successfully.")
 
 
-    print("State dict keys (first 5):", list(model.state_dict().keys())[:5])
+    #print("State dict keys (first 5):", list(model.state_dict().keys())[:5])
     # デバイスに移動
     model.to(device)
     
@@ -385,7 +302,7 @@ def load_model_and_tokenizer(config):
 
 if __name__ == '__main__':
     # 設定ファイルの読み込み
-    with open("/content/drive/MyDrive/B4yokosawa/INFO/config/rag-tok-base-ct.json") as f:
+    with open("/content/drive/MyDrive/experience/INFO/config/rag-tok-base-ct.json") as f:
         config = json.load(f)
 
     # モデルとトークナイザーを読み込む
@@ -409,5 +326,5 @@ if __name__ == '__main__':
     evaluation = Evaluation(args, tokenizer, data_processor, model_processor)
 
     # モデルを指定して評価を実行
-    metrics = evaluation.evaluate(model, epoch=1, typ="valid")  # validまたはtestを選択
+    metrics = evaluation.evaluate(model, epoch=1, typ="test")  # validまたはtestを選択
     print(metrics)  # 結果を表示

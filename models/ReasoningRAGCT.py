@@ -118,7 +118,7 @@ class ReasoningRAGCT(nn.Module):
         self.kn_loss_fct = CrossEntropyLoss()
         self.pe_loss_fct = BCEWithLogitsLoss(pos_weight=torch.tensor(6))
     
-    def build_ce_input(self, bsz, cand_num, input_ids, cand_input_ids, cand_attn_mask):
+    """def build_ce_input(self, bsz, cand_num, input_ids, cand_input_ids, cand_attn_mask):
         cross_input_ids = []
         cross_attn_mask = []
         cross_token_type_ids = []
@@ -171,7 +171,7 @@ class ReasoningRAGCT(nn.Module):
         cross_attn_mask = torch.stack(cross_attn_mask).to(self.device)
         cross_token_type_ids = torch.stack(cross_token_type_ids).to(self.device)
         
-        return cross_input_ids, cross_attn_mask, cross_token_type_ids
+        return cross_input_ids, cross_attn_mask, cross_token_type_ids"""
     
     def forward(self, input_ids, input_attn_mask, decoder_input_ids,
                 persona_input_ids, persona_attn_mask,
@@ -273,6 +273,15 @@ class ReasoningRAGCT(nn.Module):
         persona_grounding = batch["persona_grounding"]
         knowledge_grounding = batch["knowledge_grounding"]
         outputs = {}
+        
+        #summarizer = TextSummarizer()
+        #land_name = summarizer.process_tokens(input_ids)
+        #print(land_name)
+
+        #knowledge_input_ids, knowledge_attn_mask = summarizer.get_text(land_name)
+        #knowledge_input_ids = knowledge_input_ids.unsqueeze(0)
+        #knowledge_attn_mask = knowledge_attn_mask.unsqueeze(0)
+        
         kn_logits = self.kn_poly_encoder(context_input_ids=input_ids,
                                          context_input_masks=input_attn_mask,
                                          responses_input_ids=knowledge_input_ids,
@@ -331,129 +340,32 @@ class ReasoningRAGCT(nn.Module):
         pe_sel_indices = torch.stack(pe_sel_index).to(self.device)
         persona_pred = pe_sel_indices  # persona_predも更新
 
-        #True
-        """bsz = persona_input_ids.size()[0]
-        pe_sel_input_ids_b = []
-        pe_sel_index = []
-        for bs in range(bsz):
-            pe_empty_index = torch.zeros([self.args.persona_num], device=self.device)  # デバイス上でゼロのテンソルを作成
-            grounding_value = persona_grounding[bs]  # 各バッチのpersona_groundingを取得
-            print("Grounding value for batch", bs, ":", grounding_value)
-            print("pe_empty_index before assignment:", pe_empty_index)
-            # persona_groundingに基づいて選択
-            if grounding_value.sum().item() != 0:  # persona_groundingが全て0でない場合
-                pe_empty_index[grounding_value.bool()] = 1  # grounding_valueが1のインデックスを1に設定
-                #pe_sel_input_ids_b_f = persona_input_ids[bs, :, :][0]  # persona_groundingに基づいて選択
-                pe_sel_input_ids_b_f = persona_input_ids[bs, grounding_value.bool(), :]
-                pe_sel_input_ids_b_f = pe_sel_input_ids_b_f[pe_sel_input_ids_b_f != self.tokenizer.question_encoder.pad_token_id].detach().tolist()
-                
-                # persona_predとして選択されたインデックスを追加
-                pe_sel_index.append(pe_empty_index)
-            else:
-                pe_sel_input_ids_b_f = []
-                pe_sel_index.append(pe_empty_index)  # 0のインデックスを追加
-            #
-            print("pe_empty_index after assignment:", pe_empty_index)
-            candidate_padding_length = self.args.max_paragraph_len - len(pe_sel_input_ids_b_f)
-            
-            if candidate_padding_length > 0:
-                pe_sel_input_ids_b_f += [self.tokenizer.question_encoder.pad_token_id] * candidate_padding_length
-            else:
-                pe_sel_input_ids_b_f = pe_sel_input_ids_b_f[:self.args.max_paragraph_len]
-            
-            assert len(pe_sel_input_ids_b_f) == self.args.max_paragraph_len
-            pe_sel_input_ids_b.append(torch.tensor(pe_sel_input_ids_b_f).long())
-
-        print("pe_sel_input_ids_b", pe_sel_input_ids_b)
-        # pe_sel_input_idsを生成
-        pe_sel_input_ids = torch.stack(pe_sel_input_ids_b).to(self.device)
-        pe_sel_indices = torch.stack(pe_sel_index).to(self.device)
-        persona_pred = pe_sel_indices  # persona_predも更新"""
-        
-        #false
-        """bsz = persona_input_ids.size()[0]
-        pe_sel_input_ids_b = []
-        pe_sel_index = []
-        for bs in range(bsz):
-            # デバイス上でゼロのテンソルを作成
-            pe_empty_index = torch.zeros([self.args.persona_num], device=self.device)
-            
-            # 各バッチのpersona_groundingを取得し、ビット反転させる
-            grounding_value = persona_grounding[bs]
-            inverted_grounding_value = ~grounding_value.bool()  # persona_groundingを反転
-            
-            # デバッグ用の出力
-            print("Original grounding value for batch", bs, ":", grounding_value)
-            print("Inverted grounding value for batch", bs, ":", inverted_grounding_value)
-            print("pe_empty_index before assignment:", pe_empty_index)
-            
-            # persona_groundingの反転値に基づいて選択
-            if inverted_grounding_value.sum().item() != 0:  # 反転したpersona_groundingが全て0でない場合
-                pe_empty_index[inverted_grounding_value] = 1  # inverted_grounding_valueが1のインデックスを1に設定
-                #pe_sel_input_ids_b_f = persona_input_ids[bs, :, :][0]  # persona_groundingに基づいて選択
-                # inverted_grounding_value に基づく複数の persona 候補を取得
-                pe_sel_input_ids_b_f = persona_input_ids[bs, inverted_grounding_value, :]
-
-                pe_sel_input_ids_b_f = pe_sel_input_ids_b_f[pe_sel_input_ids_b_f != self.tokenizer.question_encoder.pad_token_id].detach().tolist()
-                
-                # persona_predとして選択されたインデックスを追加
-                pe_sel_index.append(pe_empty_index)
-            else:
-                pe_sel_input_ids_b_f = []
-                pe_sel_index.append(pe_empty_index)  # 0のインデックスを追加
-            
-            # デバッグ用の出力
-            print("pe_empty_index after assignment:", pe_empty_index)
-            
-            # 必要に応じてパディングを追加して長さを調整
-            candidate_padding_length = self.args.max_paragraph_len - len(pe_sel_input_ids_b_f)
-            
-            if candidate_padding_length > 0:
-                pe_sel_input_ids_b_f += [self.tokenizer.question_encoder.pad_token_id] * candidate_padding_length
-            else:
-                pe_sel_input_ids_b_f = pe_sel_input_ids_b_f[:self.args.max_paragraph_len]
-            
-            assert len(pe_sel_input_ids_b_f) == self.args.max_paragraph_len
-            pe_sel_input_ids_b.append(torch.tensor(pe_sel_input_ids_b_f).long())
-
-        # pe_sel_input_idsとpe_sel_indicesを生成し、デバイスに転送
-        pe_sel_input_ids = torch.stack(pe_sel_input_ids_b).to(self.device)
-        pe_sel_indices = torch.stack(pe_sel_index).to(self.device)
-        persona_pred = pe_sel_indices  # persona_predも更新"""
-
 
         # new_input を作成
         new_input = torch.cat((input_ids[:, -312:], pe_sel_input_ids, kn_sel_input_ids), 1)
-        #知識を消してみる
-        #new_input = torch.cat((input_ids[:, -312:], pe_sel_input_ids), 1)
 
-        """question_hidden_states = self.backbone_model.question_encoder(new_input)[0]
+        question_hidden_states = self.backbone_model.question_encoder(new_input)[0]
         docs_dict = self.retriever(new_input.detach().cpu().numpy(), question_hidden_states.detach().cpu().numpy(),
                                    return_tensors="pt")
         docs_dict = {dd: docs_dict[dd].to(self.device) for dd in docs_dict}
         
         doc_scores = torch.bmm(
-            question_hidden_states.unsqueeze(1), docs_dict["retrieved_doc_embeds"].float().transpose(1, 2)).squeeze(1)"""
+            question_hidden_states.unsqueeze(1), docs_dict["retrieved_doc_embeds"].float().transpose(1, 2)).squeeze(1)
             
-        context_attention_mask = (new_input != 0).long()
 
         gen_outputs = self.backbone_model(
-            #context_input_ids=docs_dict["context_input_ids"],
-            #context_attention_mask=docs_dict["context_attention_mask"],
-            context_input_ids=new_input,
-            context_attention_mask=context_attention_mask,
-            #doc_scores=doc_scores,
+            context_input_ids=docs_dict["context_input_ids"],
+            context_attention_mask=docs_dict["context_attention_mask"],
+            doc_scores=doc_scores,
             decoder_input_ids=decoder_input_ids,
             labels=decoder_input_ids,
-            #output_retrieved=True,
+            output_retrieved=True,
         )
         generated = self.backbone_model.generate(
-            #context_input_ids=docs_dict["context_input_ids"],
-            #context_attention_mask=docs_dict["context_attention_mask"],
-            context_input_ids=new_input,
-            context_attention_mask=context_attention_mask,
-            #doc_scores=doc_scores 
-            )
+            context_input_ids=docs_dict["context_input_ids"],
+            context_attention_mask=docs_dict["context_attention_mask"],
+            doc_scores=doc_scores 
+        )
 
         try:
             print("input")
@@ -583,3 +495,132 @@ class ReasoningRAGCT(nn.Module):
         r5_indices = torch.topk(kn_logits, 5)[1]  # R 5 @ 100
 
         return persona_pred, r1_indices, r2_indices, r5_indices, pred_gen"""
+        
+"""class DocumentRetriever:
+    def __init__(self, model_name="facebook/dpr-question_encoder-single-nq-base"):
+        # モデルとトークナイザの事前キャッシュ
+        local_cache_dir = "/content/drive/MyDrive/huggingface_cache"
+        os.makedirs(local_cache_dir, exist_ok=True)
+
+        # 質問エンコーダ用トークナイザをローカルキャッシュからロード
+        self.question_tokenizer = DPRQuestionEncoderTokenizer.from_pretrained(model_name, cache_dir=local_cache_dir)
+
+        # コンテキストエンコーダ用トークナイザをローカルキャッシュからロード
+        self.context_tokenizer = DPRContextEncoderTokenizer.from_pretrained("facebook/dpr-ctx_encoder-single-nq-base", cache_dir=local_cache_dir)
+
+        # deviceを正しく初期化
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        # 知識データセットとFAISSインデックスのパス
+        self.knowledge_dataset_path = "/content/drive/MyDrive/B4yokosawa/INFO/data/knowledge_index/knowledge_dataset"
+        self.index_path = "/content/drive/MyDrive/B4yokosawa/INFO/data/knowledge_index/knowledge_dataset_hnsw_index.faiss"
+
+        # FAISSインデックスのロード
+        self.index = faiss.read_index(self.index_path)
+
+        # 質問エンコーダ（BERTベースモデル）
+        self.model = DPRQuestionEncoder.from_pretrained(model_name, cache_dir=local_cache_dir).to(self.device)
+
+    def process_and_compare(self, input_ids, input_attn_mask, top_k=10):
+        # モデルのデバイスを取得
+        device = self.model.device
+
+        # 入力をモデルのデバイスに転送
+        input_ids = input_ids.to(device)
+        input_attn_mask = input_attn_mask.to(device)
+
+        # 質問文をエンコードして埋め込みを取得
+        with torch.no_grad():
+            query_embedding = self.model(input_ids, attention_mask=input_attn_mask).pooler_output
+
+        # FAISSを使用して、入力埋め込みに最も近い文書を検索
+        query_embedding_np = query_embedding.cpu().numpy().astype(np.float32)
+        _, indices = self.index.search(query_embedding_np, top_k)
+
+        # データセットのロード（Arrowファイルの読み込み）
+        dataset = load_dataset('arrow', data_files=["/content/drive/MyDrive/B4yokosawa/INFO/data/knowledge_index/knowledge_dataset/data-00000-of-00002.arrow", 
+                                                    "/content/drive/MyDrive/B4yokosawa/INFO/data/knowledge_index/knowledge_dataset/data-00001-of-00002.arrow"], split='train')
+
+        # インデックスに基づいて関連文書を取得
+        passages = dataset["text"]  # ここで "text" は文書のカラム名に合わせて変更してください
+
+        # インデックスに基づいて関連文書を取得
+        related_passages = [passages[i] for i in indices[0]]
+
+        # 関連文書のトークン化（DPRContextEncoderTokenizerを使用）
+        context_input_ids = self.context_tokenizer(related_passages, padding=True, truncation=True, return_tensors="pt")["input_ids"].to(device)
+        context_attn_mask = self.context_tokenizer(related_passages, padding=True, truncation=True, return_tensors="pt")["attention_mask"].to(device)
+
+        return context_input_ids, context_attn_mask"""
+        
+
+
+"""class TextSummarizer:
+    def __init__(self,device=None):
+        # モデルとトークナイザーをロード
+        self.tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+        #self.result_pd = pd.read_csv('/content/drive/MyDrive/experience/INFO/data/exst.csv', encoding='utf-8', on_bad_lines='skip')
+        self.result_pd = pd.read_csv('/content/drive/MyDrive/encoded_exst.csv', encoding='utf-8', on_bad_lines='skip')
+        self.result_pd = pd.read_csv('/content/drive/MyDrive/encoded_exst.csv', encoding='utf-8', on_bad_lines='skip',usecols=["Title","input_ids","attention_mask"])
+        #self.encoded_file_path = '/content/drive/MyDrive/encoded_exst.csv'
+        #with open(self.encoded_file_path, 'r') as file:
+        #        self.encoded_texts = json.load(file)
+        #print(self.encoded_texts.keys())
+        # GPUの設定 (もし利用可能なら)
+        self.device = ("cuda" if torch.cuda.is_available() else "cpu")
+    
+    def get_text(self, land_name):
+      result_pd = self.result_pd
+      tokenizer = self.tokenizer
+
+      filtered_rows = result_pd[result_pd['Title'].str.lower() == land_name]
+      #filtered_rows = result_pd[result_pd['Title'] == land_name]
+      input_ids = []
+      attention_mask = []
+      
+      # `apply()`を使用して一括でJSON形式のリストに変換
+      #input_ids = filtered_rows['input_ids'].apply(json.loads).tolist()
+      #attention_mask = filtered_rows['attention_mask'].apply(json.loads).tolist()
+      # JSON形式の文字列をリストに変換
+      input_ids = [json.loads(x) for x in filtered_rows['input_ids']]
+      attention_mask = [json.loads(x) for x in filtered_rows['attention_mask']]
+      
+
+      #input_ids = torch.tensor(input_ids, dtype=torch.long).to(self.device)
+      #attention_mask = torch.tensor(attention_mask, dtype=torch.long).to(self.device)
+  
+      # 最大長を計算
+      max_len = max(len(ids) for ids in input_ids)
+
+      # パディングを追加
+      input_ids_padded = [ids + [0] * (max_len - len(ids)) for ids in input_ids]
+      attention_mask_padded = [mask + [0] * (max_len - len(mask)) for mask in attention_mask]
+
+      # テンソルに変換
+      input_ids = torch.tensor(input_ids_padded, dtype=torch.long).to(self.device)
+      attention_mask = torch.tensor(attention_mask_padded, dtype=torch.long).to(self.device)
+
+
+      return input_ids, attention_mask
+
+    def process_tokens(self,input_ids, sep_token_id=102, cls_token_id=101, unwanted_tokens=None): 
+        # テンソルの場合はリストに変換
+      if isinstance(input_ids, torch.Tensor):
+          input_ids = input_ids.tolist()  # [[101, 27192, ...]] に変換
+          if isinstance(input_ids[0], list):
+              input_ids = input_ids[0]  # 最初のサンプルだけを抽出
+
+      # [SEP]トークンの位置を特定し、ランドマーク名のトークン部分を抽出
+      sep_index = input_ids.index(sep_token_id) if sep_token_id in input_ids else len(input_ids)
+      landmark_token_ids = input_ids[1:sep_index]  # [CLS]の次から[SEP]の手前まで
+
+      #land_name = [str(token) for token in land_name] # 各トークンを文字列に変換
+      land_name = [self.tokenizer.decode(token) for token in landmark_token_ids]
+      land_name = "".join(land_name).replace("##", "")
+
+      land_name = [text.replace('[CLS]', '').split('[SEP]')[0].strip() if text else "" for text in land_name]
+      land_name = "".join(land_name)
+
+      #land_name = land_name.replace("ʼ", "\'")
+
+      return land_name"""
