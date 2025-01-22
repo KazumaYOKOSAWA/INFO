@@ -192,8 +192,8 @@ class CustomChatModel(object):
         ps_loss, ps_cnt = 0, 0
 
         # 例: 10,000ステップで停止
-        max_steps = 1000  # 任意の停止ステップ数
-        global_iteration_step = 0
+        #max_steps = 1000  # 任意の停止ステップ数
+        #global_iteration_step = 0
         
         for epoch in range(self.start_epoch, self.args.num_epochs + 1):
             self.model.train()
@@ -213,10 +213,6 @@ class CustomChatModel(object):
                 output = self.model(**forward_args)
                 lm_loss, knowledge_loss, persona_loss = output["lm_loss"], output["knowledge_loss"], output[
                     "persona_loss"]
-                
-                  # ここで不要なテンソルを削除する
-                del forward_args  # 計算後に不要になった場合削除
-                del output  # 計算後に不要になった場合削除
                             
                 loss = torch.sum(
                     torch.stack([lm_loss.clone() * self.args.lm_coef, knowledge_loss.clone() * self.args.kn_coef,
@@ -224,9 +220,6 @@ class CustomChatModel(object):
                 lm_loss += lm_loss.clone().item()
                 kn_loss += knowledge_loss.clone().item()
                 ps_loss += persona_loss.clone().item()
-                
-                 # lossの計算後に不要なテンソルを削除
-                del lm_loss, knowledge_loss, persona_loss  # 計算後に不要なら削除
                 
                 if lm_cnt != 0:
                     self.tb_writer.add_scalar('LM_loss', lm_loss / lm_cnt, lm_cnt)
@@ -240,11 +233,6 @@ class CustomChatModel(object):
                 kn_cnt += 1
                 ps_cnt += 1
                 accu_batch += batch["input_ids"].shape[0]
-                
-                # バッチの処理が終わった後にGPUからメモリ解放
-                del batch["input_ids"]
-                del batch["attention_mask"]
-                torch.cuda.empty_cache()
                 
                 if (self.args.virtual_batch_size == accu_batch) or (
                         batch_idx == (len(self.train_dataset) // self.args.batch_size)):  # last batch
@@ -278,11 +266,7 @@ class CustomChatModel(object):
                         print(metrics)
 
                 global_iteration_step += 1
-                
-                if global_iteration_step >= max_steps:
-                  print(f"Reached max steps: {max_steps}. Stopping training.")
-                  break  # 内側のループを抜ける
-                           
+                                         
             
             # -------------------------------------------------------------------------
             #   ON EPOCH END  (checkpointing and validation)

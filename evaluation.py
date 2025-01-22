@@ -139,12 +139,8 @@ class Evaluation(object):
                       newline='') as fw:
                 tqdm_batch_iterator = tqdm(self.data_map[typ])
                 qual_outputs = []
-                 # 上位10件だけ処理する
-                max_batches = 5
 
                 for batch_idx, batch in enumerate(tqdm_batch_iterator):
-                    if batch_idx >= max_batches:  # 制限を超えたらループを終了
-                      break
 
                     for b_k in batch:
                         if b_k in self.keys_for_device:
