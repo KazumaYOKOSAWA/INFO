@@ -311,9 +311,6 @@ class CustomChatModel(object):
                 if early_stop_count == 0:
                     break
 
-            if global_iteration_step >= max_steps:
-              break  # 外側のループも抜ける
-
         model_state_dict, optimizer_state_dict = load_checkpoint(
             glob.glob(os.path.join(self.checkpoint_manager.ckpt_dirpath, "*.pth"))[0])
         if isinstance(self.model, nn.DataParallel):
