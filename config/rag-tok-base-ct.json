@@ -8,7 +8,7 @@
   "debug": false,
   "data_dir": "/content/experience/INFO/data/FoCus",
   "out_dir": "results/",
-  "save_dirpath": "/content/drive/MyDrive/experience/INFO/data/checkpoints/",
+  "save_dirpath": "/content/experience/INFO/data/checkpoints/",
   "root_dirpath": "",
   "load_pthpath": "",
   "inference_path": "",

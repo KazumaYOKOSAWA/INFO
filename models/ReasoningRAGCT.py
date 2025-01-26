@@ -298,7 +298,6 @@ class ReasoningRAGCT(nn.Module):
         pe_loss = self.pe_loss_fct(pe_logits, persona_grounding.float())
         kn_loss = self.kn_loss_fct(kn_logits, knowledge_grounding)
         kn_pred_idx = torch.argmax(kn_logits, 1)
-        del kn_logits
         kn_sel_input_ids = knowledge_input_ids[torch.arange(knowledge_input_ids.size(0)), kn_pred_idx]
         
         persona_num_logits = self.pe_controller(
@@ -336,7 +335,6 @@ class ReasoningRAGCT(nn.Module):
             assert len(pe_sel_input_ids_b_f) == self.args.max_paragraph_len
             pe_sel_input_ids_b.append(torch.tensor(pe_sel_input_ids_b_f).long())
         # pe_sel_input_idsを生成
-        del pe_logits
         pe_sel_input_ids = torch.stack(pe_sel_input_ids_b).to(self.device)
         pe_sel_indices = torch.stack(pe_sel_index).to(self.device)
         persona_pred = pe_sel_indices  # persona_predも更新
