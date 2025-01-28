@@ -99,6 +99,7 @@ class Evaluation(object):
         self.rouge = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
         self.bleu_metric = evaluate.load("sacrebleu")
         self.f1_uni = evaluate.load("chrf")
+        self.bertscore = evaluate.load("bertscore")
         self.f1_p = BinaryF1Score().to(self.device)
         self.precision_p = BinaryPrecision().to(self.device)
         self.recall_p = BinaryRecall().to(self.device)
@@ -128,6 +129,7 @@ class Evaluation(object):
         h5 = 0
         f1_persona = 0
         unif1 = 0
+        bert_score = 0
         
         logger.info("Starting Evaluation %s" % typ)
         model.eval()
@@ -176,6 +178,7 @@ class Evaluation(object):
                         #rouge1 += r['rouge1'].mid.fmeasure
                         #rouge2 += r['rouge2'].mid.fmeasure
                         #rougel += r['rougeL'].mid.fmeasure
+                        bert_score += self.bertscore.compute(predictions=text_pred, references=[text_target], lang="en",device=self.device)['f1']
                         unif1 += self.f1_uni.compute(predictions=text_pred, references=[text_target], word_order=1, char_order=0)['score']
                         qual_output = {
                             "dialogID": batch["dialogID"][0],
@@ -214,6 +217,7 @@ class Evaluation(object):
                 h2_f = h2 / len(qual_outputs)
                 h5_f = h5 / len(qual_outputs)
                 unif1_f = unif1 / len(qual_outputs)
+                bert_score = bert_score / len(qual_outputs)
             
                 metrics = {
                     "k_acc": knowledge_acc_f.item(),
@@ -229,14 +233,52 @@ class Evaluation(object):
                     "unif1": unif1_f,
                     "p_precision": precision_p.item(),
                     "p_recall": recall_p.item(),
+                    "bertscore(f1)" : bert_score,
                 }
             
                 logging.info(
-                    '%s Knowledge Accuracy: %2.5f | Persona Accuracy: %2.5f | Persona F1: %2.5f | P_Precision: %2.5f | P_Recall: %2.5f | BLEU : %2.5f | ROUGE1 : %2.5f | ROUGE2 : %2.5f | ROUGEL : %2.5f | CHARF1 : %2.5f | UniF1 : %2.5f'
+                    '%s Knowledge Accuracy: %2.5f | Persona Accuracy: %2.5f | Persona F1: %2.5f | P_Precision: %2.5f | P_Recall: %2.5f | BLEU : %2.5f | ROUGE1 : %2.5f | ROUGE2 : %2.5f | ROUGEL : %2.5f | CHARF1 : %2.5f | UniF1 : %2.5f | BERTScore : %2.5f '
                     % (typ, knowledge_acc_f.item(), persona_acc_f.item(), pf1, precision_p, recall_p, bleu4_f,
-                       rouge1_f, rouge2_f, rougel_f, charf_f, unif1_f))
+                       rouge1_f, rouge2_f, rougel_f, charf_f, unif1_f, bert_score))
       
             return metrics
+
+def inference_rag(self, model, typ='inf'):
+    
+        logger.info("Starting Inference %s" % typ)
+        model.eval()
+        with torch.no_grad():
+            os.makedirs(os.path.join(os.path.dirname(self.args.save_dirpath), self.args.tb_prefix),
+                        exist_ok=True)
+            with open(os.path.join(os.path.dirname(self.args.save_dirpath), self.args.tb_prefix,
+                                   typ + f'_qualitative_results_{0}.json'), 'w',
+                      newline='') as fw:
+                tqdm_batch_iterator = tqdm(self.data_map[typ])
+                qual_outputs = []
+                for batch_idx, batch in enumerate(tqdm_batch_iterator):
+                    for b_k in batch:
+                        if b_k in self.keys_for_device:
+                            batch[b_k] = batch[b_k].to(self.device)
+                    persona_pred, k_index, r2_indices, r5_indices, pred = model.inference(batch)
+                    text_pred = pred
+                
+                    qual_output = {
+                        "dialogID": batch["dialogID"][0],
+                        "landmark_link": batch["landmark_link"][0],
+                        "dialog": batch["raw_dialog"][0],
+                        "knowledge_pred": batch["raw_knowledge_cand"][0][k_index[0][0]],
+                        "knowledge_pred_index": [k_index[0].detach().tolist()],
+                        "persona_pred": persona_pred.detach().tolist(),
+                        "persona_candidates": batch["raw_persona_cand"],
+                        "predicted_utterance": text_pred,
+                    
+                    }
+                    qual_outputs.append(qual_output)
+            
+                json.dump({
+                    "qualitative_results": qual_outputs
+                }, fw, indent=2)
+
 
 class Config:
     """コンフィグを表すクラス"""

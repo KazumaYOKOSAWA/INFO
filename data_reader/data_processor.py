@@ -36,6 +36,9 @@ class CustomChatProcessor(DataProcessor):
         elif typ == "valid":
             with open(os.path.join(self.args.data_dir, "valid_focus.json"), "r", encoding="utf-8") as reader:
                 examples = json.load(reader)["data"]
+        elif typ == "test":
+            with open(os.path.join(self.args.data_dir, "test_focus.json"), "r", encoding="utf-8") as reader:
+                examples = json.load(reader)["data"]
         elif typ == "inf":
             with open(os.path.join(self.args.inference_path), "r", encoding="utf-8") as reader:
                 examples = json.load(reader)["data"]
